@@ -3,7 +3,9 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(CountdownApp());
@@ -19,11 +21,9 @@ class CountdownApp extends StatelessWidget {
   }
 }
 
-// Page d'accord d'utilisation
 class TermsAndConditionsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    // Masquer la barre de statut au lancement
     SystemChrome.setEnabledSystemUIOverlays([]);
 
     return Scaffold(
@@ -53,11 +53,33 @@ class TermsAndConditionsPage extends StatelessWidget {
               ),
               const SizedBox(height: 40),
               ElevatedButton(
-                onPressed: () {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (context) => CountdownScreen()),
-                  );
+                onPressed: () async {
+                  // Vérifie si l'heure de fin est déjà stockée
+                  SharedPreferences prefs =
+                      await SharedPreferences.getInstance();
+                  DateTime? storedEndTime =
+                      DateTime.tryParse(prefs.getString('endTime') ?? '');
+
+                  if (storedEndTime != null) {
+                    // Si l'heure de fin est stockée, on l'utilise
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => CountdownScreen(storedEndTime)),
+                    );
+                  } else {
+                    // Sinon, on génère une nouvelle heure de fin et on la stocke
+                    int randomHours = Random().nextInt(100);
+                    DateTime newEndTime =
+                        DateTime.now().add(Duration(hours: randomHours));
+                    await prefs.setString(
+                        'endTime', newEndTime.toIso8601String());
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => CountdownScreen(newEndTime)),
+                    );
+                  }
                 },
                 child: const Text('J\'accepte'),
                 style: ElevatedButton.styleFrom(primary: Colors.red),
@@ -90,6 +112,10 @@ class TermsAndConditionsPage extends StatelessWidget {
 }
 
 class CountdownScreen extends StatefulWidget {
+  final DateTime endTime;
+
+  CountdownScreen(this.endTime);
+
   @override
   _CountdownScreenState createState() => _CountdownScreenState();
 }
@@ -97,24 +123,25 @@ class CountdownScreen extends StatefulWidget {
 class _CountdownScreenState extends State<CountdownScreen> {
   late DateTime endTime;
   late Duration remainingTime;
+  late AudioPlayer _audioPlayer;
   late Timer _timer;
 
   @override
   void initState() {
     super.initState();
-
-    int randomHours = Random().nextInt(100);
-
-    // Définir l'heure de fin avec la durée aléatoire générée
-    endTime = DateTime.now().add(Duration(hours: randomHours));
+    endTime = widget.endTime;
     remainingTime = endTime.difference(DateTime.now());
+    _audioPlayer = AudioPlayer();
+    _timer = Timer.periodic(Duration(minutes: 1), (timer) {
+      _playBip();
+    });
 
     _timer = Timer.periodic(Duration(seconds: 1), (timer) {
       setState(() {
         remainingTime = endTime.difference(DateTime.now());
         if (remainingTime.isNegative) {
           _timer.cancel();
-          _showDeathAlert(); // Affiche l'alerte quand le compte à rebours est terminé
+          _showDeathAlert();
         }
       });
     });
@@ -123,10 +150,14 @@ class _CountdownScreenState extends State<CountdownScreen> {
   @override
   void dispose() {
     _timer.cancel();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
-  // Affiche l'alerte quand le compte à rebours est écoulé
+  void _playBip() async {
+    await _audioPlayer.play(AssetSource('assets/countdown.mp3'));
+  }
+
   void _showDeathAlert() {
     showDialog(
       context: context,
