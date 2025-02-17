@@ -132,7 +132,7 @@ class _CountdownScreenState extends State<CountdownScreen> {
     endTime = widget.endTime;
     remainingTime = endTime.difference(DateTime.now());
     _audioPlayer = AudioPlayer();
-    _timer = Timer.periodic(Duration(minutes: 1), (timer) {
+    _timer = Timer.periodic(Duration(minutes: 60), (timer) {
       _playBip();
     });
 
